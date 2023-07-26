@@ -29,13 +29,74 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 uint8_t MouseData1[4] = {0,0,0,0};
+unsigned char keyNum = 0;
+
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
+extern uint8_t USBD_HID_SendReport(USBD_HandleTypeDef *pdev,
+	                       uint8_t *report,
+                           uint16_t len);
+
+
+
+//构造一个鼠标事件
+typedef struct{
+	char mouse_abs_left : 1;  //左键单击
+	char mouse_abs_right : 1;  //右键单机
+	char mouse_abs_wheel : 1;  //中键单击
+	char reserve : 5;  //常量0
+	char mouse_rel_x;  //鼠标x轴移动
+	char mouse_rel_y;  //鼠标y轴移动
+	char mouse_rel_wheel;  //鼠标滚轮移动值
+}tyMouse_buf;
+
 /* USER CODE END PTD */
 
+#define KEY0_Press (1<<0)
+#define KEY1_Press (1<<1)
+#define KEY2_Press (1<<2)
+#define KEY3_Press (1<<3)
+
+tyMouse_buf tMouse_buff;
+
+void User_init(void)
+{
+	tMouse_buff.mouse_abs_left = 0;
+	tMouse_buff.mouse_abs_right = 0;
+	tMouse_buff.mouse_abs_wheel = 0;
+	tMouse_buff.reserve = 0;
+	tMouse_buff.mouse_rel_x = 0;
+	tMouse_buff.mouse_rel_y = 0;
+	tMouse_buff.mouse_rel_wheel = 0;
+}
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+//读取Key的按键值
+unsigned char Get_key_num(void)
+{
+	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_1)==0)
+	{
+		HAL_Delay(20); //按键消抖操作
+		while(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_1)==0);
+		HAL_Delay(20);
+		keyNum = 1;
+	}
+	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_11)==0)
+	{
+		HAL_Delay(20);
+		while(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_11)==0);
+		HAL_Delay(20);
+		keyNum = 2;
+	}
+
+	return keyNum;
+}
+
+void Send_mouse_msg(void)
+{
+	USBD_HID_SendReport(&hUsbDeviceFS,(uint8_t *)&tMouse_buff,sizeof(tMouse_buff));
+}
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -51,6 +112,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -66,10 +128,9 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
+  
+  //unsigned char keyNumLast;
+  //int cnt;
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -97,21 +158,19 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
-	  MouseData1[0] = 0x02;
-	  
-	 USBD_HID_SendReport(&hUsbDeviceFS,(uint8_t*)&MouseData1,sizeof(MouseData1));
-
-	  HAL_Delay(1000);
-	  
-	  MouseData1[0] = 0x00;
-	  
-	  USBD_HID_SendReport(&hUsbDeviceFS,(uint8_t*)&MouseData1,sizeof(MouseData1));
-    
-	  HAL_Delay(1000);
-	  /* USER CODE BEGIN 3 */
+	  keyNum = Get_key_num();
+    if(keyNum == 1)
+	{
+		MouseData1[0] = 0x02; //鼠标右键按下
+		USBD_HID_SendReport(&hUsbDeviceFS,(uint8_t*)&MouseData1,sizeof(MouseData1));
+	}
+    if(keyNum == 2)
+	{
+		MouseData1[0]=0x01; //鼠标左键按下
+	   USBD_HID_SendReport(&hUsbDeviceFS,(uint8_t*)&MouseData1,sizeof(MouseData1));
+	}
   }
-  /* USER CODE END 3 */
+  
 }
 
 /**
@@ -158,6 +217,21 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+static void MX_GPIO_Init(void)
+{
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	
+	//GPIO 接口时钟使能
+	__HAL_RCC_GPIOE_CLK_ENABLE();
+	__HAL_RCC_GPIOB_CLK_ENABLE();
+	
+	//配置GPIO 接口：B11 B1
+	GPIO_InitStruct.Pin = GPIO_PIN_1 | GPIO_PIN_11;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLUP;
+	HAL_GPIO_Init(GPIOE,&GPIO_InitStruct);
 }
 
 /* USER CODE BEGIN 4 */
